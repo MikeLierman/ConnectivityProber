@@ -28,55 +28,69 @@ namespace ConnectivityProber
 
         /* VARIABLES */
         private static bool checkFailed = false;
+        private static bool fatalError = false;
 
         private static void DoStuff()
         {
             /* KEEP THINGS OUT OF Main() */
             PingTesting();
 
-            /* What did we find, boys? */
-            /* Return the exit code. */
+            /* IF FATAL ERROR, JUST EXIT */
+            if (fatalError) { Console.WriteLine("E; "); Environment.Exit(0); }
+
+            /* WHAT DID WE FIND BOYS? */
             if (checkFailed) { Console.WriteLine("CHECK FAILED;"); Environment.Exit(-3); }
             else { Console.WriteLine("CHECK PASSED;"); Environment.Exit(0); }
         }
 
         private static void PingTesting()
         {
-            // Variables
-            long trip = 1; /* RESPONSE TIME */
-            long avg = 0; /* TOTAL AVERAGE TIME */
-            int packets = 0; /* NUMBER OF TOTAL PING PACKETS SENT OUT */
-            int err = 0; /* ERRORS ENCOUNTERED */
-            var p = new Ping();
-            PingReply pr;
-
-            while (packets < 200)
+            try
             {
-                packets++;
-                pr = p.Send("google.com");
-                if (pr.Status == IPStatus.Success)
+                // VARIABLES
+                long trip = 1; /* RESPONSE TIME */
+                long avg = 0; /* TOTAL AVERAGE TIME */
+                int packets = 0; /* NUMBER OF TOTAL PING PACKETS SENT OUT */
+                int err = 0; /* ERRORS ENCOUNTERED */
+                int caught = 0; /* FATAL ERRORS ENCOUNTERED */
+                var p = new Ping();
+                PingReply pr;
+
+                while (packets < 200)
                 {
-                    trip = pr.RoundtripTime;
-                    avg += trip;
+                    try
+                    {
+                        packets++;
+                        pr = p.Send("google.com");
+                        if (pr.Status == IPStatus.Success)
+                        {
+                            trip = pr.RoundtripTime;
+                            avg += trip;
+                        }
+                        else
+                        { err++; }
+
+                        Thread.Sleep(500);
+                    }
+                    catch { caught++; }
                 }
-                else
-                { err++; }
 
-                Thread.Sleep(500);
+                if (caught > 190) { fatalError = true; return; }
+
+                /* GET AVERAGE */
+                avg = avg / packets;
+
+                /* NO WAY OUR AVERAGE ROUNDTRIP TIME IS LESS THAN 2MS OR GREATER THAN 100. 
+                 * ALSO FAIL CHECK IF DROPPED PACKETS OVER 5, OR AV */
+                if (avg < 2)
+                { Console.WriteLine("No connection detected; "); err = 200; checkFailed = true; }
+                else if (avg > 100)
+                { Console.WriteLine("Heavy jitter detected; "); checkFailed = true; }
+                else if (err > 5)
+                { checkFailed = true; }
+                Console.WriteLine("Sent=" + packets + ", Received=" + (packets - err).ToString() + ", Lost=" + err + ", Avg=" + avg + "; ");
             }
-
-            /* GET AVERAGE */
-            avg = avg / packets;
-
-            /* NO WAY OUR AVERAGE ROUNDTRIP TIME IS LESS THAN 2MS OR GREATER THAN 100. 
-             * ALSO FAIL CHECK IF DROPPED PACKETS OVER 5, OR AV */
-            if (avg < 2)
-            { Console.WriteLine("No connection detected; "); err = 200; checkFailed = true; }
-            else if (avg > 100)
-            { Console.WriteLine("Heavy jitter detected; "); checkFailed = true; }
-            else if (err > 5)
-            {  checkFailed = true; }
-            Console.WriteLine("Sent="+packets+", Received="+(packets-err).ToString()+", Lost="+err+", Avg=" + avg+"; ");
+            catch { fatalError = true; }
         }
     }
 
